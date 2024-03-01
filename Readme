@@ -1,3 +1,4 @@
 This file is used for champsim visualization.
+RUN VMS.py
 A cache visualization tool which will be used to visualize cache and memory access.
 ![Alt text]("https://github.com/Sushant0001/VisualMemorySimulator/blob/main/screenshot04320.png")
