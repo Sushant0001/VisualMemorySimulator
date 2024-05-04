@@ -3,7 +3,7 @@ message: "If you use this software, please cite it as below."
 authors:
   - family-names: Bhalerao 
     given-names: Sushant
-    orcid: https://orcid.org/1234-5678-9101-1121
+    orcid: https://github.com/Sushant0001/VisualMemorySimulator.git
 title: "VMS: Visual Memory Simulator"
 version: 1.0.1
 identifiers:
