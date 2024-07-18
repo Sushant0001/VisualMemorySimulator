@@ -15,26 +15,32 @@ import random
 import subprocess
 import cpp_file_creator
 from PyQt5.QtCore import Qt, QRect, QPoint, QSize
-from PyQt5.QtWidgets import QApplication, QMainWindow, QWidget, QPushButton,QFileDialog
+from PyQt5.QtWidgets import QApplication, QMainWindow, QWidget, QPushButton,QFileDialog, QMessageBox
 from PyQt5.QtGui import QPixmap
-
+import sys
+import os
+import create_graph
+from create_video import VideoGenerationWorker
 
 access_list = []
 current_access_index = 0
-
-
+file_name = ""
+trace_flag = False
+user_screenshot_count=0
+run_flag=False
 
 def read_output_trace_file():
+    global access_list
+    access_list = []
     file = open("results_trace.txt")
     lines = file.readlines()
     for line in lines:
         l = line.split()
         if len(l)>1 and l[1] == "access":
-            block_id= (int(l[6]),int(l[8]))
+            block_id= (int(l[4]),int(l[6]))
             access_list.append(block_id)
 
     print("total access : ",len(access_list))
-
 
 read_output_trace_file()
 
@@ -43,13 +49,12 @@ class CustomSet(QWidget):
         super().__init__(parent)
         self.rectangles = []  # List to store rectangles
         self.set_colors = []
-        self.color_going_to_flags = []
-        self.simulation_instruction_count = 10000 #read from GUI
-        self.part = round(self.simulation_instruction_count/3)
+        self.color_going_to_flags = [] #list to store next color (green, blue or red)
+        #self.simulation_instruction_count = 10000 #read from GUI
+        #self.part = round(self.simulation_instruction_count/3) #part between yellow-green or g-b or b-r
 
-    def paintEvent(self, event):
+    def paintEvent(self, event): #self called .. inbuilt function
         painter = QPainter(self)
-        painter.setRenderHint(QPainter.Antialiasing)
 
         # Clear the area
         painter.eraseRect(self.rect())
@@ -74,20 +79,20 @@ class CustomSet(QWidget):
         self.color_going_to_flags = []
         self.update()  # Trigger a repaint
 
-    def changeSetColor(self, rect_index):
+    def changeSetColor(self, rect_index, part):
         # print("Total rectangles : ",len(self.rectangles)) # rectangles 64
 
         if(self.color_going_to_flags[rect_index] == 'green'):
             value = self.set_colors[rect_index][0]
-            value = value - 195/self.part
+            value = value - 195/part
             self.set_colors[rect_index][0] = value
 
             value = self.set_colors[rect_index][1]
-            value = value - 63/self.part
+            value = value - 63/part
             self.set_colors[rect_index][1] = value
 
             value = self.set_colors[rect_index][2]
-            value = value - 96/self.part
+            value = value - 96/part
             self.set_colors[rect_index][2] = value
 
             if round(value) == round(0):
@@ -96,17 +101,17 @@ class CustomSet(QWidget):
                 self.set_colors[rect_index][1] = 153
                 self.set_colors[rect_index][2] = 0
 
-        if(self.color_going_to_flags[rect_index] == 'blue'):
+        elif(self.color_going_to_flags[rect_index] == 'blue'):
             value = self.set_colors[rect_index][0]
-            value = value + 72/self.part
+            value = value + 72/part
             self.set_colors[rect_index][0] = value
 
             value = self.set_colors[rect_index][1]
-            value = value - 91/self.part
+            value = value - 91/part
             self.set_colors[rect_index][1] = value
 
             value = self.set_colors[rect_index][2]
-            value = value + 210/self.part
+            value = value + 210/part
             self.set_colors[rect_index][2] = value
 
             if round(value) == round(210):
@@ -115,17 +120,17 @@ class CustomSet(QWidget):
                 self.set_colors[rect_index][1] = 62
                 self.set_colors[rect_index][2] = 210
 
-        if(self.color_going_to_flags[rect_index] == 'red'):
+        elif(self.color_going_to_flags[rect_index] == 'red'):
             value = self.set_colors[rect_index][0]
-            value = value + 132/self.part
+            value = value + 132/part
             self.set_colors[rect_index][0] = value
 
             value = self.set_colors[rect_index][1]
-            value = value - 14/self.part
+            value = value - 14/part
             self.set_colors[rect_index][1] = value
 
             value = self.set_colors[rect_index][2]
-            value = value - 162/self.part
+            value = value - 162/part
             self.set_colors[rect_index][2] = value
 
             if round(value) == round(48):
@@ -142,23 +147,15 @@ class CustomSet(QWidget):
         self.rectangles[rect_index]['color'] = new_color
         self.update()
 
-
-
-
-
-
 class CustomRectangle(QWidget):
     def __init__(self, parent=None):
         super().__init__(parent)
         self.rectangles = []  # List to store rectangles
         self.rect_colors = []
         self.color_going_to_flags = []
-        self.simulation_instruction_count = 1000 #read from GUI
-        self.part = round(self.simulation_instruction_count/3)
-
+        
     def paintEvent(self, event):
         painter = QPainter(self)
-        painter.setRenderHint(QPainter.Antialiasing)
 
         # Clear the area
         painter.eraseRect(self.rect())
@@ -183,20 +180,24 @@ class CustomRectangle(QWidget):
         self.color_going_to_flags = []
         self.update()  # Trigger a repaint
 
-    def changeRectangleColor(self, rect_index):
+    def changeRectangleColor(self, rect_index,part):
         # print("Total rectangles : ",len(self.rectangles)) #768 rectangles 64 x 12 = 768   
+
+
     
         if(self.color_going_to_flags[rect_index] == 'green'):
+            #setting new rgb values in between yellow and green 
+            #diff in r values of both is 195 so 195/part gives the amount of change needed and the value is updated accordingly
             value = self.rect_colors[rect_index][0]
-            value = value - 195/self.part
+            value = value - 195/part
             self.rect_colors[rect_index][0] = value
 
             value = self.rect_colors[rect_index][1]
-            value = value - 63/self.part
+            value = value - 63/part
             self.rect_colors[rect_index][1] = value
 
             value = self.rect_colors[rect_index][2]
-            value = value - 96/self.part
+            value = value - 96/part
             self.rect_colors[rect_index][2] = value
 
             if round(value) == round(0):
@@ -205,17 +206,17 @@ class CustomRectangle(QWidget):
                 self.rect_colors[rect_index][1] = 153
                 self.rect_colors[rect_index][2] = 0
 
-        if(self.color_going_to_flags[rect_index] == 'blue'):
+        elif(self.color_going_to_flags[rect_index] == 'blue'):
             value = self.rect_colors[rect_index][0]
-            value = value + 72/self.part
+            value = value + 72/part
             self.rect_colors[rect_index][0] = value
 
             value = self.rect_colors[rect_index][1]
-            value = value - 91/self.part
+            value = value - 91/part
             self.rect_colors[rect_index][1] = value
 
             value = self.rect_colors[rect_index][2]
-            value = value + 210/self.part
+            value = value + 210/part
             self.rect_colors[rect_index][2] = value
 
             if round(value) == round(210):
@@ -224,17 +225,17 @@ class CustomRectangle(QWidget):
                 self.rect_colors[rect_index][1] = 62
                 self.rect_colors[rect_index][2] = 210
 
-        if(self.color_going_to_flags[rect_index] == 'red'):
+        elif(self.color_going_to_flags[rect_index] == 'red'):
             value = self.rect_colors[rect_index][0]
-            value = value + 132/self.part
+            value = value + 132/part
             self.rect_colors[rect_index][0] = value
 
             value = self.rect_colors[rect_index][1]
-            value = value - 14/self.part
+            value = value - 14/part
             self.rect_colors[rect_index][1] = value
 
             value = self.rect_colors[rect_index][2]
-            value = value - 162/self.part
+            value = value - 162/part
             self.rect_colors[rect_index][2] = value
 
             if round(value) == round(48):
@@ -248,155 +249,222 @@ class CustomRectangle(QWidget):
         # print(self.color_going_to_flags[rect_index])
         new_color = QColor(round(self.rect_colors[rect_index][0]),round(self.rect_colors[rect_index][1]),round(self.rect_colors[rect_index][2]))
         self.rectangles[rect_index]['color'] = new_color
+        # self.rectangles[rect_index]['color'] = Qt.red
         self.update()
 
 
+def ensure_clean_folder(folder_path):
+        """Ensures the folder is clean by removing all its contents."""
+        if os.path.exists(folder_path):
+            for filename in os.listdir(folder_path):
+                file_path = os.path.join(folder_path, filename)
+                try:
+                    if os.path.isfile(file_path) or os.path.islink(file_path):
+                        os.unlink(file_path)  # Remove the file or link
+                    elif os.path.isdir(file_path):
+                        # Remove the directory recursively
+                        for root, dirs, files in os.walk(file_path, topdown=False):
+                            for name in files:
+                                os.remove(os.path.join(root, name))
+                            for name in dirs:
+                                os.rmdir(os.path.join(root, name))
+                        os.rmdir(file_path)
+                except Exception as e:
+                    print(f'Failed to delete {file_path}. Reason: {e}')
+        else:
+            os.makedirs(folder_path)
 
-        
+
 class Ui_MainWindow(object):
+    def __init__(self, take_screenshot_func):
+        self.access_counter = 0
+        self.take_screenshot_func = take_screenshot_func
+        super().__init__()
 
     def traverse_all_accesses(self):
-        cpp_file_creator.create_code_file(self.textEdit.toPlainText())
-        read_output_trace_file()
+        global access_list
         global current_access_index
-        if current_access_index >= (len(access_list)):
-            current_access_index = 0
-        print("button pressed")
-        for access_block in access_list:
-            
-            current_access_index += 1    
-            new_color = QColor(Qt.red)
-            self.rectangles[access_block[1]][access_block[0]].changeColor(new_color)
-            QtWidgets.QApplication.processEvents()  # Process events to update the GUI
-            time.sleep(0.0001) 
-            print("current_access_index : ",current_access_index)    
+        global trace_flag
+        global file_name
+        global run_flag
+        self.reset_window()
+        folder = os.path.join(os.getcwd(), 'screenshots')
+        ensure_clean_folder(folder)
+        run_flag=True
 
+        
+        if trace_flag == False:
+            cpp_file_creator.create_code_file(self.textEdit.toPlainText())
+
+        else:
+            cpp_file_creator.create_trace_file(file_name)
+
+
+        read_output_trace_file()
+        
+        if current_access_index >= (len(access_list)):
+        #     current_access_index = 0
+            print("current_access_index",current_access_index)
+            print("End of trace ")
+
+        #print("button pressed")
+        else:
+            for block_id in access_list:
+                self.access_counter += 1
+                if (self.access_counter%25==0):
+                    self.take_screenshot_func(self.access_counter)
+                set_count = int(self.comboBox_sets.currentText())
+                way_count= int(self.comboBox_ways.currentText())
+                block_index = block_id[1]*set_count + block_id[0] #no. of sets * current way number gives x and adding set no. gives y also -->> column major access of array for 2D matrix
+                set_index = block_id[0]
+
+                simulation_instruction_count = int(self.lineEdit_tolerance.displayText())
+                part = round(simulation_instruction_count/3)
+
+                self.customRectangle.changeRectangleColor(block_index,part)
+                self.customSet.changeSetColor(set_index,part*way_count)
+
+            current_access_index=len(access_list)
+            
     def next_access(self):
         global current_access_index
-        print(current_access_index)
-        skip_ammount = int(self.lineEdit.displayText())
+        print("current_access_index",current_access_index)
+        skip_amount = int(self.lineEdit.displayText()) #lineEdit is the line for skip instruction count label
 
-        while skip_ammount > 0:
-            if current_access_index > len(access_list):
+        while skip_amount > 0:
+            if current_access_index >= len(access_list):
                 print("End of trace ")
                 return
             block_id = access_list[current_access_index]
 
             print("current_access_index : ",current_access_index,'block id : ',block_id)
             set_count = int(self.comboBox_sets.currentText())
+            way_count= int(self.comboBox_ways.currentText())
             block_index = block_id[1]*set_count + block_id[0]
             set_index = block_id[0]
-            self.customRectangle.changeRectangleColor(block_index)
-            self.customSet.changeSetColor(set_index)
+
+            simulation_instruction_count = int(self.lineEdit_tolerance.displayText())
+            part = round(simulation_instruction_count/3)
+            
+            self.customRectangle.changeRectangleColor(block_index,part)
+            self.customSet.changeSetColor(set_index,part*way_count)
             # self.customRectangle.changeRectangleColor(0)
             # self.customSet.changeSetColor(0)
-            current_access_index += 1
-            skip_ammount -= 1
+            current_access_index += 1%len(access_list)
+            skip_amount -= 1
             self.label_address.setText(str("Current Access "+str(current_access_index)+" "+str(block_id)))
-
-
-
-
 
     def setupUi(self, MainWindow):
         self.MainWindow = MainWindow 
         MainWindow.setObjectName("MainWindow")
-        MainWindow.resize(1200, 693)
+        MainWindow.resize(1400, 693)
+        screen = QApplication.primaryScreen().availableGeometry()
 
-        sizePolicy = QtWidgets.QSizePolicy(QtWidgets.QSizePolicy.Maximum, QtWidgets.QSizePolicy.Maximum)
-        sizePolicy.setHorizontalStretch(0)
-        sizePolicy.setVerticalStretch(0)
-        sizePolicy.setHeightForWidth(MainWindow.sizePolicy().hasHeightForWidth())
+        # sizePolicy = QtWidgets.QSizePolicy(QtWidgets.QSizePolicy.Maximum, QtWidgets.QSizePolicy.Maximum)
+        # sizePolicy.setHorizontalStretch(0)
+        # sizePolicy.setVerticalStretch(0)
+        # sizePolicy.setHeightForWidth(MainWindow.sizePolicy().hasHeightForWidth())
 
-        MainWindow.setSizePolicy(sizePolicy)
+        # MainWindow.setSizePolicy(sizePolicy)
 
         self.centralwidget = QtWidgets.QWidget(MainWindow)
-        self.centralwidget.setEnabled(True)
-
-        sizePolicy = QtWidgets.QSizePolicy(QtWidgets.QSizePolicy.Expanding, QtWidgets.QSizePolicy.Expanding)
-        sizePolicy.setHorizontalStretch(0)
-        sizePolicy.setVerticalStretch(0)
-        sizePolicy.setHeightForWidth(self.centralwidget.sizePolicy().hasHeightForWidth())
-
-        self.centralwidget.setSizePolicy(sizePolicy)
         self.centralwidget.setObjectName("centralwidget")
 
+        #self.centralwidget.setEnabled(1)
+
+        # sizePolicy = QtWidgets.QSizePolicy(QtWidgets.QSizePolicy.Expanding, QtWidgets.QSizePolicy.Expanding)
+        # sizePolicy.setHorizontalStretch(0)
+        # sizePolicy.setVerticalStretch(0)
+        # sizePolicy.setHeightForWidth(self.centralwidget.sizePolicy().hasHeightForWidth())
+
+        # self.centralwidget.setSizePolicy(sizePolicy)
+
         self.pushButton_bar = QtWidgets.QPushButton(self.centralwidget)
-        self.pushButton_bar.setGeometry(QtCore.QRect(130,520,800,30))
+        #self.pushButton_bar.setGeometry(QtCore.QRect(130,520,800,30))
+        self.pushButton_bar.setObjectName("pushButton_bar")
 
         self.label_address = QtWidgets.QLabel(self.centralwidget)
-        self.label_address.setGeometry(QtCore.QRect(1000,520,200,30))
+        #self.label_address.setGeometry(QtCore.QRect(1000,520,200,30))
+        self.label_address.setObjectName("label_address")
+
+        self.pushButton_reset = QtWidgets.QPushButton(self.centralwidget)                     #reset button
+        #self.pushButton_reset.setGeometry(QtCore.QRect(270, 600, 80, 25))
+        self.pushButton_reset.setObjectName("pushButton_reset")
 
         self.pushButton_run = QtWidgets.QPushButton(self.centralwidget)                     #run button
-        self.pushButton_run.setGeometry(QtCore.QRect(370, 600, 80, 25))
+        #self.pushButton_run.setGeometry(QtCore.QRect(370, 600, 80, 25))
         self.pushButton_run.setObjectName("runButton")
 
         self.pushButton_next = QtWidgets.QPushButton(self.centralwidget)                   #next button
-        self.pushButton_next.setGeometry(QtCore.QRect(470, 600, 80, 25))
+        #self.pushButton_next.setGeometry(QtCore.QRect(470, 600, 80, 25))
         self.pushButton_next.setObjectName("nextButton")
 
         self.pushButton_update_parameter = QtWidgets.QPushButton(self.centralwidget)                   #next button
-        self.pushButton_update_parameter.setGeometry(QtCore.QRect(600, 10, 200, 25))
+        #self.pushButton_update_parameter.setGeometry(QtCore.QRect(600, 10, 200, 25))
         self.pushButton_update_parameter.setObjectName("parameterButton")
 
         self.radioButton_lru = QtWidgets.QRadioButton(self.centralwidget)
-        self.radioButton_lru.setGeometry(QtCore.QRect(9, 32, 53, 23))
+        #self.radioButton_lru.setGeometry(QtCore.QRect(9, 32, 53, 23))
         self.radioButton_lru.setObjectName("radioButton")
+        self.radioButton_lru.setChecked(True) #by default lru policy works
 
         self.radioButton_srrip = QtWidgets.QRadioButton(self.centralwidget)
-        self.radioButton_srrip.setGeometry(QtCore.QRect(9, 61, 65, 23))
+        #self.radioButton_srrip.setGeometry(QtCore.QRect(9, 61, 65, 23))
         self.radioButton_srrip.setObjectName("radioButton_2")
 
         self.toolButton_upload_trace = QtWidgets.QToolButton(self.centralwidget)
-        self.toolButton_upload_trace.setGeometry(QtCore.QRect(1060, 460, 26, 24))
+        #self.toolButton_upload_trace.setGeometry(QtCore.QRect(1060, 460, 26, 24))
         self.toolButton_upload_trace.setObjectName("toolButton")
 
         self.toolButton_upload_file = QtWidgets.QToolButton(self.centralwidget)
-        self.toolButton_upload_file.setGeometry(QtCore.QRect(1240, 460, 26, 24))
+        #self.toolButton_upload_file.setGeometry(QtCore.QRect(1240, 460, 26, 24))
         self.toolButton_upload_file.setObjectName("toolButton_2")
 
         self.label_select_policy = QtWidgets.QLabel(self.centralwidget)
-        self.label_select_policy.setGeometry(QtCore.QRect(9, 9, 180, 17))
+        #self.label_select_policy.setGeometry(QtCore.QRect(9, 9, 180, 17))
         self.label_select_policy.setObjectName("label")
         
         self.label_write_code = QtWidgets.QLabel(self.centralwidget)
-        self.label_write_code.setGeometry(QtCore.QRect(980, 20, 198, 17))
+        #self.label_write_code.setGeometry(QtCore.QRect(980, 20, 198, 17))
         self.label_write_code.setObjectName("label_2")
         
         self.label_select_trace = QtWidgets.QLabel(self.centralwidget)
-        self.label_select_trace.setGeometry(QtCore.QRect(940, 470, 106, 17))
+        #self.label_select_trace.setGeometry(QtCore.QRect(940, 470, 106, 17))
         self.label_select_trace.setObjectName("label_3")
 
         self.label_ways = QtWidgets.QLabel(self.centralwidget)
-        self.label_ways.setGeometry(QtCore.QRect(500, 70, 106, 17))
+        #self.label_ways.setGeometry(QtCore.QRect(500, 70, 106, 17))
         self.label_ways.setObjectName("label_f1")
 
         self.label_sets = QtWidgets.QLabel(self.centralwidget)
-        self.label_sets.setGeometry(QtCore.QRect(5, 275, 106, 17))
+        #self.label_sets.setGeometry(QtCore.QRect(5, 275, 106, 17))
         self.label_sets.setObjectName("label_f2")
 
         self.label_block_size = QtWidgets.QLabel(self.centralwidget)
-        self.label_block_size.setGeometry(QtCore.QRect(230, 10, 71, 17))
+        #self.label_block_size.setGeometry(QtCore.QRect(230, 10, 71, 17))
         self.label_block_size.setObjectName("label_4")
-        self.label_sets2 = QtWidgets.QLabel(self.centralwidget)
-        self.label_sets2.setGeometry(QtCore.QRect(370, 10, 31, 17))
+
+        self.label_sets2 = QtWidgets.QLabel(self.centralwidget)   # before combobox of sets
+        #self.label_sets2.setGeometry(QtCore.QRect(370, 10, 31, 17))  
         self.label_sets2.setObjectName("label_5")
-        self.label_ways2 = QtWidgets.QLabel(self.centralwidget)
-        self.label_ways2.setGeometry(QtCore.QRect(460, 10, 41, 17))
+
+        self.label_ways2 = QtWidgets.QLabel(self.centralwidget) # before combobox of ways
+        #self.label_ways2.setGeometry(QtCore.QRect(460, 10, 41, 17))
         self.label_ways2.setObjectName("label_6")
 
         self.label_skip_instructions = QtWidgets.QLabel(self.centralwidget)
-        self.label_skip_instructions.setGeometry(QtCore.QRect(580, 600, 160, 20))
+        #self.label_skip_instructions.setGeometry(QtCore.QRect(580, 600, 160, 20))
 
         self.comboBox_block_size = QtWidgets.QComboBox(self.centralwidget)
-        self.comboBox_block_size.setGeometry(QtCore.QRect(300, 10, 60, 25))
+        #self.comboBox_block_size.setGeometry(QtCore.QRect(300, 10, 60, 25))
         self.comboBox_block_size.setObjectName("comboBox")
         self.comboBox_block_size.addItem("")
         self.comboBox_block_size.addItem("")
         self.comboBox_block_size.addItem("")
         self.comboBox_block_size.addItem("")
+
         self.comboBox_sets = QtWidgets.QComboBox(self.centralwidget)
-        self.comboBox_sets.setGeometry(QtCore.QRect(400, 10, 60, 25))
+        #self.comboBox_sets.setGeometry(QtCore.QRect(400, 10, 60, 25))
         self.comboBox_sets.setObjectName("comboBox_2")
         self.comboBox_sets.addItem("")
         self.comboBox_sets.addItem("")
@@ -404,63 +472,75 @@ class Ui_MainWindow(object):
         self.comboBox_sets.addItem("")
         self.comboBox_sets.addItem("")
         self.comboBox_sets.addItem("")
+
         self.comboBox_ways = QtWidgets.QComboBox(self.centralwidget)
-        self.comboBox_ways.setGeometry(QtCore.QRect(500, 10, 60, 25))
+        #self.comboBox_ways.setGeometry(QtCore.QRect(500, 10, 60, 25))
         self.comboBox_ways.setObjectName("comboBox_3")
         self.comboBox_ways.addItem("")
         self.comboBox_ways.addItem("")
         self.comboBox_ways.addItem("")
         self.comboBox_ways.addItem("")
         self.comboBox_ways.addItem("")
+
+        self.graphcheckbox=QtWidgets.QCheckBox(self.centralwidget)
+        self.graphcheckbox.setObjectName("graphcheckbox")
+
+        self.videocheckbox=QtWidgets.QCheckBox(self.centralwidget)
+        self.videocheckbox.setObjectName("videocheckbox")
+
         self.label_upload_file = QtWidgets.QLabel(self.centralwidget)
-        self.label_upload_file.setGeometry(QtCore.QRect(1100, 470, 131, 17))
+        #self.label_upload_file.setGeometry(QtCore.QRect(1100, 470, 131, 17))
         self.label_upload_file.setObjectName("label_7")
         
+        self.screenshot_button = QPushButton(self.centralwidget)
+        #self.screenshot_button.setGeometry(10, 10, 150, 30)
+        self.screenshot_button.setText("Take Screenshot")
 
 
 
-        self.textEdit = QtWidgets.QTextEdit(self.centralwidget)
-        self.textEdit.setGeometry(QtCore.QRect(980, 50, 341, 401))
+        self.textEdit = QtWidgets.QTextEdit(self.centralwidget) #for input code
+        #self.textEdit.setGeometry(QtCore.QRect(980, 50, 341, 401))
 
-        self.lineEdit = QtWidgets.QLineEdit(self.centralwidget)
-        self.lineEdit.setGeometry(QtCore.QRect(750, 600, 100, 20))
+        self.lineEdit = QtWidgets.QLineEdit(self.centralwidget) # for skip instruction count
+        #self.lineEdit.setGeometry(QtCore.QRect(750, 600, 100, 20))
 
-        self.label_write_tolerance = QtWidgets.QLabel(self.centralwidget)
-        self.label_write_tolerance.setGeometry(QtCore.QRect(870, 600, 110, 20))
+        self.label_write_tolerance = QtWidgets.QLabel(self.centralwidget) 
+        #self.label_write_tolerance.setGeometry(QtCore.QRect(870, 600, 110, 20))
 
-        self.lineEdit_tolerance = QtWidgets.QLineEdit(self.centralwidget)
-        self.lineEdit_tolerance.setGeometry(QtCore.QRect(990, 600, 100, 20))
+        self.lineEdit_tolerance = QtWidgets.QLineEdit(self.centralwidget) # for write tolerance
+        #self.lineEdit_tolerance.setGeometry(QtCore.QRect(990, 600, 100, 20))
 
-        sizePolicy = QtWidgets.QSizePolicy(QtWidgets.QSizePolicy.Expanding, QtWidgets.QSizePolicy.Expanding)
-        sizePolicy.setHorizontalStretch(0)
-        sizePolicy.setVerticalStretch(0)
-        sizePolicy.setHeightForWidth(self.textEdit.sizePolicy().hasHeightForWidth())
+        # sizePolicy = QtWidgets.QSizePolicy(QtWidgets.QSizePolicy.Expanding, QtWidgets.QSizePolicy.Expanding)
+        # sizePolicy.setHorizontalStretch(0)
+        # sizePolicy.setVerticalStretch(0)
+        # sizePolicy.setHeightForWidth(self.textEdit.sizePolicy().hasHeightForWidth())
+        # self.textEdit.setSizePolicy(sizePolicy)
+        #self.textEdit.setTabletTracking(False)
 
-        self.textEdit.setSizePolicy(sizePolicy)
-        self.textEdit.setTabletTracking(False)
-        self.textEdit.setFrameShape(QtWidgets.QFrame.StyledPanel)
+        self.textEdit.setFrameShape(QtWidgets.QFrame.Box)
         self.textEdit.setObjectName("textEdit")
 
         MainWindow.setCentralWidget(self.centralwidget)
 
-        self.menubar = QtWidgets.QMenuBar(MainWindow)
-        self.menubar.setGeometry(QtCore.QRect(0, 0, 1127, 22))
-        self.menubar.setObjectName("menubar")
-        MainWindow.setMenuBar(self.menubar)
+        # self.menubar = QtWidgets.QMenuBar(MainWindow)
+        # self.menubar.setGeometry(QtCore.QRect(0, 0, 1127, 22))
+        # self.menubar.setObjectName("menubar")
+        # MainWindow.setMenuBar(self.menubar)
 
-        self.statusbar = QtWidgets.QStatusBar(MainWindow)
-        self.statusbar.setObjectName("statusbar")
-        MainWindow.setStatusBar(self.statusbar)
+        # self.statusbar = QtWidgets.QStatusBar(MainWindow)
+        # self.statusbar.setObjectName("statusbar")
+        # MainWindow.setStatusBar(self.statusbar)
 
-        self.box_width = 800
-        self.box_height = 400
+        self.box_width = round(screen.width()*0.43)
+        self.box_height =round(screen.height()*0.382)
+        # print(self.box_width, " ", self.box_height)
+        # print(screen.width(), " ", screen.height())
 
+        self.customRectangle = CustomRectangle(self.centralwidget)  # instance of CustomRectangle class   #big rectangle to hold all blocks (ways)
+        #self.customRectangle.setGeometry(QRect(130, 100, self.box_width, self.box_height))
 
-        self.customRectangle = CustomRectangle(self.centralwidget)
-        self.customRectangle.setGeometry(QRect(130, 100, self.box_width, self.box_height))
-
-        self.customSet = CustomSet(self.centralwidget)
-        self.customSet.setGeometry(QRect(50,100,50,self.box_height))
+        self.customSet = CustomSet(self.centralwidget) # instance of CustomSet class    #long rectangle to hold all sets rectangles
+        #self.customSet.setGeometry(QRect(50,100,50,self.box_height))
 
         self.retranslateUi(MainWindow)
         QtCore.QMetaObject.connectSlotsByName(MainWindow)
@@ -471,13 +551,13 @@ class Ui_MainWindow(object):
 
     def addSets(self):
         set_count = int(self.comboBox_sets.currentText())
-        block_height = round(400/set_count)
+        block_height = round(self.box_height/set_count)
 
         self.clearSets()
 
         for i in range(set_count):
             y = i*block_height
-            rect = QRect(QPoint(0, y), QSize(40,block_height))
+            rect = QRect(QPoint(0, y), QSize(round(self.box_width*0.02857),block_height))
             color = QColor(246,216,96)
             self.customSet.addSet(rect,color)
 
@@ -491,13 +571,13 @@ class Ui_MainWindow(object):
            
         set_count = int(self.comboBox_sets.currentText())
         way_count = int(self.comboBox_ways.currentText())
-        block_height = round(400/set_count)
-        block_width = round(800/way_count)
+        block_height = round(round(self.box_height)/set_count)
+        block_width = round((self.box_width)/way_count)
 
         # Clear existing rectangles
         self.clearRectangles()
 
-        # Add new rectangles at random positions
+        # Add new rectangles
         for i in range(way_count):
             for j in range(set_count):
                 x = i*block_width
@@ -513,26 +593,30 @@ class Ui_MainWindow(object):
         self.addRectangles()
         self.addSets()
         
-        # subprocess.run(["./build_champsim.sh","bimodal","no","no","no","no","lru","1"])
-        while(True):
-            sample_file = open("sample.txt")
-            lines = sample_file.readlines()
-            splits = []
-            for line in lines:
-                splits = line.split()
+        # while(True):
+        #     sample_file = open("sample.txt")
+        #     lines = sample_file.readlines()
+        #     splits = []
+        #     for line in lines:
+        #         splits = line.split()
 
-            if splits[0] == 'modified':
-                break
+        #     if splits[0] == 'modified':
+        #         break
 
-        print("FIle modified")
+        # print("FIle modified")
 
-
-
-    
-        
-        
+    def update_parameters(self, srrip=0):
+        self.redrawRectangles()
+        set_count = self.comboBox_sets.currentText()
+        way_count = self.comboBox_ways.currentText()
+        if srrip:
+            cpp_file_creator.replace_lines_srrip("inc/cache.h",[55,56],["#define L1D_SET "+set_count,"#define L1D_WAY "+way_count])
+        else:
+            cpp_file_creator.replace_lines("inc/cache.h",[55,56],["#define L1D_SET "+set_count,"#define L1D_WAY "+way_count])
 
     def upload_code_file(self):
+        global trace_flag
+        trace_flag = False
         file_name, _ = QFileDialog.getOpenFileName(self.centralwidget, 'Upload C/C++ Code', '', 'C/C++ Files (*.c *.cpp *.xz)')
         print("Filename is : ",file_name)
         if file_name:
@@ -540,14 +624,31 @@ class Ui_MainWindow(object):
                 code = file.read()
                 self.textEdit.setText(code)
 
+
     def upload_trace_file(self):
+        global trace_flag
+        global file_name
+        trace_flag = True
         file_name, _ = QFileDialog.getOpenFileName(self.centralwidget,'Upload .xz trace file','','Trace files (*.xz)')
         print("Trace file uploaded : ",file_name)
+        if file_name:  
+            self.textEdit.setText("Trace file uploaded : "+file_name)
+
+
+    def reset_window(self):
+        global current_access_index
+        
+        current_access_index = 0
+        self.clearRectangles()
+        self.addRectangles()
+        self.addSets()
 
 
     def retranslateUi(self, MainWindow):
         _translate = QtCore.QCoreApplication.translate
         MainWindow.setWindowTitle(_translate("MainWindow", "Visual Memory Simulator"))
+        self.pushButton_reset.setText(_translate("MainWindow", "Reset"))
+        self.pushButton_reset.clicked.connect(self.reset_window)
         self.pushButton_run.setText(_translate("MainWindow", "Run"))
         gradient_color = """
                                        background-color: qlineargradient(x1:0, y1:0, x2:1, y2:0,
@@ -561,12 +662,12 @@ class Ui_MainWindow(object):
         self.pushButton_bar.setStyleSheet(gradient_color)
         self.label_address.setText("block id")
         self.label_write_tolerance.setText("Write Tolerance")
-        self.lineEdit_tolerance.setText("1000000")
+        self.lineEdit_tolerance.setText("100")
         self.pushButton_run.clicked.connect(self.traverse_all_accesses)
         self.pushButton_next.setText(_translate("MainWindow", "Next"))
         self.pushButton_next.clicked.connect(self.next_access)
         self.pushButton_update_parameter.setText(_translate("MainWindow", "Update Parameter"))
-        self.pushButton_update_parameter.clicked.connect(self.redrawRectangles)
+        self.pushButton_update_parameter.clicked.connect(self.update_parameters)
         self.label_select_policy.setText(_translate("MainWindow", "Select Replacement Policy"))
         self.label_write_code.setText(_translate("MainWindow", "Write/Paste your code here - "))
         self.label_select_trace.setText(_translate("MainWindow", "Select trace file"))
@@ -577,53 +678,242 @@ class Ui_MainWindow(object):
         self.radioButton_srrip.setText(_translate("MainWindow", "SRRIP"))
         self.toolButton_upload_trace.setText(_translate("MainWindow", "..."))
         self.toolButton_upload_file.setText(_translate("MainWindow", "..."))
-        
+        self.screenshot_button.setText(_translate("MainWindow","Take Screenshot"))
+        self.graphcheckbox.setText(_translate("MainWindow","Create Graph"))
+        self.videocheckbox.setText(_translate("MainWindow","Create Video"))
         self.lineEdit.setText(_translate("MainWindow","1"))
         self.textEdit.setHtml(_translate("MainWindow", "<!DOCTYPE HTML PUBLIC \"-//W3C//DTD HTML 4.0//EN\" \"http://www.w3.org/TR/REC-html40/strict.dtd\">\n"
 "<html><head><meta name=\"qrichtext\" content=\"1\" /><style type=\"text/css\">\n"
 "p, li { white-space: pre-wrap; }\n"
 "</style></head><body style=\" font-family:\'Ubuntu\'; font-size:11pt; font-weight:400; font-style:normal;\">\n"
 "<p style=\" margin-top:0px; margin-bottom:0px; margin-left:0px; margin-right:0px; -qt-block-indent:0; text-indent:0px;\">#include&lt;stdio.h&gt;</p>\n"
-"<p style=\" margin-top:0px; margin-bottom:0px; margin-left:0px; margin-right:0px; -qt-block-indent:0; text-indent:0px;\">int main()</p>\n"
+"<p style=\" margin-top:0px; margin-bottom:0px; margin-left:0px; margin-right:0px; -qt-block-indent:0; text-indent:0px;\">int main()</p>\n" 
 "<p style=\" margin-top:0px; margin-bottom:0px; margin-left:0px; margin-right:0px; -qt-block-indent:0; text-indent:0px;\">{</p>\n"
 "<p style=\" margin-top:0px; margin-bottom:0px; margin-left:0px; margin-right:0px; -qt-block-indent:0; text-indent:0px;\">    int a[100][100];</p>\n"
 "<p style=\" margin-top:0px; margin-bottom:0px; margin-left:0px; margin-right:0px; -qt-block-indent:0; text-indent:0px;\">    for(int i=0;i&lt;100;i++)</p>\n"
 "<p style=\" margin-top:0px; margin-bottom:0px; margin-left:0px; margin-right:0px; -qt-block-indent:0; text-indent:0px;\">    {</p>\n"
 "<p style=\" margin-top:0px; margin-bottom:0px; margin-left:0px; margin-right:0px; -qt-block-indent:0; text-indent:0px;\">        for(int j=0;j&lt;100;j++)</p>\n"
 "<p style=\" margin-top:0px; margin-bottom:0px; margin-left:0px; margin-right:0px; -qt-block-indent:0; text-indent:0px;\">        {</p>\n"
-"<p style=\" margin-top:0px; margin-bottom:0px; margin-left:0px; margin-right:0px; -qt-block-indent:0; text-indent:0px;\">        printf(&quot;%d&quot;,a[i][j]);</p>\n"
+"<p style=\" margin-top:0px; margin-bottom:0px; margin-left:0px; margin-right:0px; -qt-block-indent:0; text-indent:0px;\">        a[i][j] = 5 ;</p>\n"
 "<p style=\" margin-top:0px; margin-bottom:0px; margin-left:0px; margin-right:0px; -qt-block-indent:0; text-indent:0px;\">        }</p>\n"
 "<p style=\" margin-top:0px; margin-bottom:0px; margin-left:0px; margin-right:0px; -qt-block-indent:0; text-indent:0px;\">    }</p>\n"
 "<p style=\" margin-top:0px; margin-bottom:0px; margin-left:0px; margin-right:0px; -qt-block-indent:0; text-indent:0px;\">}</p></body></html>"))
-        self.textEdit.setText("Trace Uploaded 'astar_163B.trace.xz' ")
+        # self.textEdit.setText("Trace Uploaded 'astar_163B.trace.xz' ")
         self.label_block_size.setText(_translate("MainWindow", "Block Size"))
         self.label_sets2.setText(_translate("MainWindow", "Sets"))
         self.label_ways2.setText(_translate("MainWindow", "Ways"))
+
         self.comboBox_block_size.setItemText(0, _translate("MainWindow", "64"))
         self.comboBox_block_size.setItemText(1, _translate("MainWindow", "32"))
         self.comboBox_block_size.setItemText(2, _translate("MainWindow", "128"))
         self.comboBox_block_size.setItemText(3, _translate("MainWindow", "256"))
-        self.comboBox_sets.setItemText(0, _translate("MainWindow", "64"))
-        self.comboBox_sets.setItemText(1, _translate("MainWindow", "8"))
-        self.comboBox_sets.setItemText(2, _translate("MainWindow", "16"))
-        self.comboBox_sets.setItemText(3, _translate("MainWindow", "32"))
-        self.comboBox_sets.setItemText(4, _translate("MainWindow", "128"))
-        self.comboBox_sets.setItemText(5, _translate("MainWindow", "256"))
-        self.comboBox_ways.setItemText(0, _translate("MainWindow", "12"))
-        self.comboBox_ways.setItemText(1, _translate("MainWindow", "8"))
-        self.comboBox_ways.setItemText(2, _translate("MainWindow", "16"))
-        self.comboBox_ways.setItemText(3, _translate("MainWindow", "20"))
-        self.comboBox_ways.setItemText(4, _translate("MainWindow", "24"))
+
+        #setting current set and way to the comboboxes
+        setlist=["8", "16", "32", "64", "128", "256"]
+        waylist=["8", "12", "16", "20", "24"]
+        current_set_value, current_way_value=cpp_file_creator.read_current_set_way("inc/cache.h",[55,56])
+        #print(current_set_value,current_way_value)
+        for index in range(0,6):
+            if setlist[index]==current_set_value:
+                setlist[index]=setlist[0]
+                setlist[0]=current_set_value
+                break
+
+        for index in range(0,5):
+            if waylist[index]==current_way_value:
+                waylist[index]=waylist[0]
+                waylist[0]=current_way_value
+                break
+
+        self.comboBox_sets.setItemText(0, _translate("MainWindow", setlist[0]))
+        self.comboBox_sets.setItemText(1, _translate("MainWindow", setlist[1]))
+        self.comboBox_sets.setItemText(2, _translate("MainWindow", setlist[2]))
+        self.comboBox_sets.setItemText(3, _translate("MainWindow", setlist[3]))
+        self.comboBox_sets.setItemText(4, _translate("MainWindow", setlist[4]))
+        self.comboBox_sets.setItemText(5, _translate("MainWindow", setlist[5]))
+
+        self.comboBox_ways.setItemText(0, _translate("MainWindow", waylist[0]))
+        self.comboBox_ways.setItemText(1, _translate("MainWindow", waylist[1]))
+        self.comboBox_ways.setItemText(2, _translate("MainWindow", waylist[2]))
+        self.comboBox_ways.setItemText(3, _translate("MainWindow", waylist[3]))
+        self.comboBox_ways.setItemText(4, _translate("MainWindow", waylist[4]))
+
         self.label_upload_file.setText(_translate("MainWindow", "Upload C/C++ code"))
         self.toolButton_upload_file.clicked.connect(self.upload_code_file)
         self.toolButton_upload_trace.clicked.connect(self.upload_trace_file)
 
 
+# if __name__ == "__main__":
+#     import sys
+#     app = QtWidgets.QApplication(sys.argv)
+#     MainWindow = QtWidgets.QMainWindow()
+#     ui = Ui_MainWindow()
+#     ui.setupUi(MainWindow)
+#     MainWindow.show()
+#     sys.exit(app.exec_())
+
+
+class MainWindow(QMainWindow):
+    def __init__(self): #overwriting constructor of MainWindow class , self is the current instance of MainWindow class
+        super().__init__() #QMainWindow's constructor called
+        self.ui = Ui_MainWindow(self.take_screenshot) #self.ui is the instance of Ui_MainWindow, self.ui means MainWindow's instance has an object ui which is an instance of Ui_MainWindow
+        self.ui.setupUi(self) #setup widgets of Ui_MainWindow in the MainWindow's current instance
+        self.setWindowTitle("Visual Memory Simulator") 
+
+        # Connect the button click to the screenshot function
+        self.ui.screenshot_button.clicked.connect(self.take_user_screenshot)
+        self.ui.graphcheckbox.stateChanged.connect(self.graph_on_state_change)
+        self.ui.videocheckbox.stateChanged.connect(self.video_on_state_change)
+        self.ui.radioButton_srrip.toggled.connect(self.on_radio_srrip_toggled)
+        self.ui.radioButton_lru.toggled.connect(self.on_radio_lru_toggled)
+
+    def on_radio_srrip_toggled(self, checked):
+        if checked:
+            self.ui.update_parameters(1)
+            #print("srrip")
+        else:
+            pass
+    
+    def on_radio_lru_toggled(self, checked):
+        if checked:
+            self.ui.update_parameters(0)
+            #print("lru")
+        else:
+            pass
+
+    def graph_on_state_change(self):
+        if self.ui.graphcheckbox.isChecked():
+            if run_flag==True:
+                create_graph.read_trace_generate_graph()
+            else:
+                QMessageBox.critical(self, 'Error',"Run the program before creating the graph")
+                self.ui.graphcheckbox.setChecked(False)
+
+    def video_on_state_change(self):
+        if self.ui.videocheckbox.isChecked():
+            if run_flag==True:
+                folder = os.path.join(os.getcwd(), 'screenshots')
+                if folder:
+                    self.ui.videocheckbox.setEnabled(False)  # Disable checkbox during processing
+                    self.worker = VideoGenerationWorker(folder)
+                    self.worker.finished.connect(self.on_video_generation_finished)
+                    self.worker.error.connect(self.on_video_generation_error)
+                    self.worker.start()
+                else: #error handling
+                    QMessageBox.critical(self, 'Error', "Screenshots folder does not exist.")
+                    self.ui.videocheckbox.setChecked(False)
+            else:
+                QMessageBox.critical(self, 'Error',"Run the program before creating the video")
+                self.ui.videocheckbox.setChecked(False)
+
+    def on_video_generation_finished(self, video_name):
+        script_directory = os.path.dirname(os.path.realpath(__file__))
+        location=os.path.join(script_directory, "output_video.avi")
+        QMessageBox.information(self, 'Video Generated', f'Video {video_name} has been created successfully and saved at the location {location}')
+        self.ui.videocheckbox.setEnabled(True)
+        #delete the screenshots folder after the creation of video
+        screenshot_folder=os.path.join(script_directory, "screenshots")
+        ensure_clean_folder(screenshot_folder)
+        try:
+            os.rmdir(screenshot_folder)
+            #print(f"Folder '{screenshot_folder}' successfully deleted.")
+        except OSError as e:
+            print(f"Error: {screenshot_folder} : {e.strerror}")
+
+    def on_video_generation_error(self, error_message):
+        self.ui.videocheckbox.setEnabled(True)
+        #error_message can also be printed if needed
+        QMessageBox.critical(self, 'Error',"Run the program before creating the video")
+
+    def take_screenshot(self,i=-1): #for video generation
+        screenshot = QPixmap(self.size())
+        
+        self.render(screenshot)
+
+        # Get the directory of the script file
+        script_directory = os.path.dirname(os.path.realpath(__file__))
+
+        # Create a folder if it doesn't exist in the script directory
+        folder_name = os.path.join(script_directory, "screenshots")
+        if not os.path.exists(folder_name):
+            os.makedirs(folder_name)
+
+        # Save the screenshot to a file in the folder
+        if (i==-1): #never happens ususally but just added for error handling
+            name="FalseScreenshot.png"
+        else:
+            name="screenshot"+str(i)+".png"
+        file_path = os.path.join(folder_name,name)
+        screenshot.save(file_path, 'png')
+
+        print(f"Screenshot saved to: {file_path}")
+
+    def take_user_screenshot(self): #for user to take screenshots using the button
+        global user_screenshot_count
+        screenshot = QPixmap(self.size())
+        
+        self.render(screenshot)
+
+        # Get the directory of the script file
+        script_directory = os.path.dirname(os.path.realpath(__file__))
+
+        # Create a folder if it doesn't exist in the script directory
+        folder_name = os.path.join(script_directory, "userScreenshots")
+        if not os.path.exists(folder_name):
+            os.makedirs(folder_name)
+            
+        name="userScreenshot"+str(user_screenshot_count)+".png"
+        user_screenshot_count+=1
+
+        # Save the screenshot to a file in the folder
+        file_path = os.path.join(folder_name,name)
+        screenshot.save(file_path, 'png')
+
+        print(f"Screenshot saved to: {file_path}")
+        
+
+    def resizeEvent(self, event):
+        window_width = self.width()
+        window_height = self.height()
+        
+        self.ui.pushButton_bar.setGeometry(int(window_width * 0.093), int(window_height * 0.75), int(window_width * 0.57), int(window_height * 0.04))
+        self.ui.label_address.setGeometry(int(window_width * 0.714), int(window_height * 0.75), int(window_width * 0.143), int(window_height * 0.04))
+        self.ui.pushButton_reset.setGeometry(int(window_width * 0.210), int(window_height * 0.865), int(window_width * 0.037), int(window_height * 0.036))
+        self.ui.pushButton_run.setGeometry(int(window_width * 0.264), int(window_height * 0.865), int(window_width * 0.057), int(window_height * 0.036))
+        self.ui.pushButton_next.setGeometry(int(window_width * 0.336), int(window_height * 0.865), int(window_width * 0.057), int(window_height * 0.036))
+        self.ui.pushButton_update_parameter.setGeometry(int(window_width * 0.429), int(window_height * 0.014), int(window_width * 0.143), int(window_height * 0.036))
+        self.ui.radioButton_lru.setGeometry(int(window_width * 0.006), int(window_height * 0.046), int(window_width * 0.038), int(window_height * 0.033))
+        self.ui.radioButton_srrip.setGeometry(int(window_width * 0.006), int(window_height * 0.087), int(window_width * 0.047), int(window_height * 0.033))
+        self.ui.toolButton_upload_trace.setGeometry(int(window_width * 0.757), int(window_height * 0.67), int(window_width * 0.0186), int(window_height * 0.035))
+        self.ui.toolButton_upload_file.setGeometry(int(window_width * 0.886), int(window_height * 0.664), int(window_width * 0.0186), int(window_height * 0.035))
+        self.ui.label_select_policy.setGeometry(int(window_width * 0.006), int(window_height * 0.013), int(window_width * 0.129), int(window_height * 0.0245))
+        self.ui.label_write_code.setGeometry(int(window_width * 0.7), int(window_height * 0.0289), int(window_width * 0.141), int(window_height * 0.0245))
+        self.ui.label_select_trace.setGeometry(int(window_width * 0.67), int(window_height * 0.678), int(window_width * 0.0757), int(window_height * 0.0245))
+        self.ui.label_ways.setGeometry(int(window_width * 0.357), int(window_height * 0.101), int(window_width * 0.0757), int(window_height * 0.0245))
+        self.ui.label_sets.setGeometry(int(window_width * 0.0036), int(window_height * 0.397), int(window_width * 0.0757), int(window_height * 0.0245))
+        self.ui.label_block_size.setGeometry(int(window_width * 0.164), int(window_height * 0.0144), int(window_width * 0.051), int(window_height * 0.0245))
+        self.ui.label_sets2.setGeometry(int(window_width * 0.264), int(window_height * 0.0144), int(window_width * 0.0221), int(window_height * 0.0245))
+        self.ui.label_ways2.setGeometry(int(window_width * 0.329), int(window_height * 0.0144), int(window_width * 0.0292), int(window_height * 0.0245))
+        self.ui.label_skip_instructions.setGeometry(int(window_width * 0.414), int(window_height * 0.865), int(window_width * 0.114), int(window_height * 0.0288))
+        self.ui.comboBox_block_size.setGeometry(int(window_width * 0.2143), int(window_height * 0.0144), int(window_width * 0.043), int(window_height * 0.036))
+        self.ui.comboBox_sets.setGeometry(int(window_width * 0.286), int(window_height * 0.0144), int(window_width * 0.043), int(window_height * 0.036))
+        self.ui.comboBox_ways.setGeometry(int(window_width * 0.357), int(window_height * 0.0144), int(window_width * 0.043), int(window_height * 0.036))
+        self.ui.label_upload_file.setGeometry(int(window_width * 0.786), int(window_height * 0.678), int(window_width * 0.0936), int(window_height * 0.0245))
+        self.ui.textEdit.setGeometry(int(window_width * 0.7), int(window_height * 0.072), int(window_width * 0.244), int(window_height * 0.579))
+        self.ui.lineEdit.setGeometry(int(window_width * 0.536), int(window_height * 0.866), int(window_width * 0.0714), int(window_height * 0.0288))
+        self.ui.label_write_tolerance.setGeometry(int(window_width * 0.621), int(window_height * 0.866), int(window_width * 0.0786), int(window_height * 0.0288))
+        self.ui.lineEdit_tolerance.setGeometry(int(window_width * 0.707), int(window_height * 0.866), int(window_width * 0.0714), int(window_height * 0.0288))
+        self.ui.customRectangle.setGeometry(int(window_width * 0.093), int(window_height * 0.144), int(window_width * 0.571), int(window_height * 0.577))
+        self.ui.customSet.setGeometry(int(window_width * 0.0357), int(window_height * 0.144), int(window_width * 0.0357), int(window_height * 0.577))
+        self.ui.screenshot_button.setGeometry(int(window_width * 0.06), int(window_height * 0.865), int(window_width * 0.037*3.5), int(window_height * 0.036))
+        self.ui.graphcheckbox.setGeometry(int(window_width * 0.6), int(window_height * 0.0144), int(window_width * 0.037*3.5), int(window_height * 0.036))
+        self.ui.videocheckbox.setGeometry(int(window_width * 0.6), int(window_height * 0.04), int(window_width * 0.037*3.5), int(window_height * 0.036))
+
+        super().resizeEvent(event)
+
 if __name__ == "__main__":
-    import sys
-    app = QtWidgets.QApplication(sys.argv)
-    MainWindow = QtWidgets.QMainWindow()
-    ui = Ui_MainWindow()
-    ui.setupUi(MainWindow)
-    MainWindow.show()
+    app = QApplication(sys.argv)
+    window = MainWindow()
+    window.show()
     sys.exit(app.exec_())
+    
